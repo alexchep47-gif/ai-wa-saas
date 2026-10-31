@@ -12,12 +12,11 @@ concurrency:
 
 jobs:
   build:
-    name: Lint · Typecheck · Build
+    name: Typecheck · Build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     env:
-      # Build-time only — no real secrets in CI logs
       DATABASE_URL: "file:./ci.db"
       AUTH_SECRET: "ci-auth-secret-must-be-at-least-32-chars-long"
       NEXT_TELEMETRY_DISABLED: "1"
@@ -33,7 +32,8 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
       - name: Generate Prisma client
         run: npx prisma generate
@@ -50,15 +50,12 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: next-build
+          name: next-build-${{ github.sha }}
           path: |
-            .next
+            .next/BUILD_ID
+            .next/build-manifest.json
             package.json
-            package-lock.json
-            prisma
-            public
-            next.config.ts
-          retention-days: 7
+          retention-days: 5
 
   security-audit:
     name: npm audit (high+)
@@ -70,7 +67,8 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
+      - run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
       - name: Audit production deps
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: true

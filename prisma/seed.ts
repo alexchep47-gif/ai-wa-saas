@@ -11,7 +11,7 @@ async function main() {
     return;
   }
 
-  const passwordHash = await bcrypt.hash("demo1234", 10);
+  const passwordHash = await bcrypt.hash("demo1234", 12);
 
   const user = await prisma.user.create({
     data: {
@@ -27,6 +27,7 @@ async function main() {
       slug: "cmr-school",
       plan: "trial",
       trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      monthlyMsgLimit: 2000,
     },
   });
 
@@ -53,6 +54,15 @@ async function main() {
           "Tu peux aussi écrire directement à notre équipe ou appeler le numéro affiché sur cmr-school.online.",
       }),
       status: "draft",
+      dailyMsgLimit: 300,
+    },
+  });
+
+  await prisma.activityLog.create({
+    data: {
+      organizationId: org.id,
+      level: "info",
+      message: "Organisation pilote initialisée (seed)",
     },
   });
 
