@@ -1,0 +1,96 @@
+// Multi-tenant schema for AI WA SaaS
+// Each Organization (school / education service) is isolated.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships  Membership[]
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  plan        String   @default("trial") // trial | starter | pro
+  trialEndsAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships Membership[]
+  agents      Agent[]
+  logs        ActivityLog[]
+}
+
+model Membership {
+  id             String   @id @default(cuid())
+  role           String   @default("admin") // owner | admin | viewer
+  userId         String
+  organizationId String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Agent {
+  id             String   @id @default(cuid())
+  name           String
+  systemPrompt   String   @default("Tu es un assistant éducatif camerounais pour un établissement scolaire. Réponds en français, clairement et poliment.")
+  quickReplies   String   @default("{}") // JSON string: { "tarifs": "...", "inscription": "..." }
+  faq            String   @default("[]") // JSON array of {q, a}
+  status         String   @default("draft") // draft | active | paused | error
+  connectionMode String   @default("none") // none | cloud_api | baileys_prototype
+  // Cloud API fields (encrypted at rest in production)
+  cloudPhoneNumberId String?
+  cloudTokenEnc      String?
+  // Baileys session reference (never store raw session in dashboard)
+  baileysSessionRef  String?
+  lastSeenAt         DateTime?
+  messagesToday      Int      @default(0)
+  organizationId     String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  logs         ActivityLog[]
+}
+
+model ActivityLog {
+  id             String   @id @default(cuid())
+  level          String   // info | warn | error
+  message        String
+  meta           String?  // JSON
+  organizationId String
+  agentId        String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+}
