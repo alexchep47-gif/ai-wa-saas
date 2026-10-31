@@ -4,9 +4,16 @@ import { prisma } from "./prisma";
 import bcrypt from "bcryptjs";
 import { generateSecureToken, hashIp, hashToken } from "./security";
 
-const secret = new TextEncoder().encode(
-  process.env.AUTH_SECRET || "dev-secret-change-me-in-production-min-32-chars"
-);
+function getAuthSecret() {
+  const configured = process.env.AUTH_SECRET;
+  if (configured && new TextEncoder().encode(configured).length >= 32) {
+    return new TextEncoder().encode(configured);
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET must be configured with at least 32 bytes in production");
+  }
+  return new TextEncoder().encode("dev-only-secret-do-not-use-in-production");
+}
 
 const COOKIE_NAME = "aiwa_session";
 const SESSION_DAYS = 14;
@@ -50,7 +57,7 @@ export async function createSession(userId: string) {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DAYS}d`)
-    .sign(secret);
+    .sign(getAuthSecret());
 
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, jwt, {
@@ -69,7 +76,7 @@ export async function destroySession() {
   const jwt = cookieStore.get(COOKIE_NAME)?.value;
   if (jwt) {
     try {
-      const { payload } = await jwtVerify(jwt, secret);
+      const { payload } = await jwtVerify(jwt, getAuthSecret());
       if (payload.sid) {
         await prisma.session.deleteMany({
           where: { token: String(payload.sid) },
@@ -88,7 +95,7 @@ export async function getCurrentUser() {
   if (!jwt) return null;
 
   try {
-    const { payload } = await jwtVerify(jwt, secret);
+    const { payload } = await jwtVerify(jwt, getAuthSecret());
     const sid = String(payload.sid || "");
     const session = await prisma.session.findUnique({
       where: { token: sid },

@@ -81,7 +81,7 @@ model Agent {
   faq                String    @default("[]")
   status             String    @default("draft") // draft | active | paused | error
   connectionMode     String    @default("none") // none | cloud_api | baileys_prototype
-  cloudPhoneNumberId String?
+  cloudPhoneNumberId String?   @unique
   cloudTokenEnc      String?   // encrypted at rest in production
   baileysSessionRef  String?
   replyInGroups      Boolean   @default(false)
@@ -100,7 +100,6 @@ model Agent {
   escalations     Escalation[]
 
   @@index([organizationId])
-  @@index([cloudPhoneNumberId])
   @@index([status])
 }
 

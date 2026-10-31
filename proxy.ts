@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Lightweight edge guard: redirect unauthenticated users away from dashboard.
+ * Lightweight request proxy: redirect unauthenticated users away from dashboard.
  * Full session verification stays in server components / API (DB-backed).
  */
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const hasSession = Boolean(req.cookies.get("aiwa_session")?.value);
 

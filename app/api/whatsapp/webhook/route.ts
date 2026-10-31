@@ -5,6 +5,7 @@ import {
   sendTextMessage,
   verifyWebhook,
 } from "@/lib/whatsapp/cloud";
+import { decryptWhatsAppToken, verifyMetaSignature } from "@/lib/whatsapp/security";
 import {
   loadRecentHistory,
   runInboundPipeline,
@@ -22,25 +23,41 @@ export async function GET(req: Request) {
   const challenge = searchParams.get("hub.challenge");
 
   const expected = process.env.WHATSAPP_VERIFY_TOKEN || "";
-  const result = verifyWebhook(mode, token, challenge, expected);
-
-  if (result !== null) {
-    return new NextResponse(result, { status: 200 });
+  if (!expected) {
+    console.error("[webhook] WHATSAPP_VERIFY_TOKEN is not configured");
+    return NextResponse.json({ error: "Webhook verification is not configured" }, { status: 503 });
   }
+
+  const result = verifyWebhook(mode, token, challenge, expected);
+  if (result !== null) return new NextResponse(result, { status: 200 });
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
 export async function POST(req: Request) {
+  const appSecret = process.env.META_APP_SECRET || "";
+  if (!appSecret) {
+    console.error("[webhook] META_APP_SECRET is not configured");
+    return NextResponse.json({ error: "Webhook signature verification is not configured" }, { status: 503 });
+  }
+
+  const rawBody = await req.text();
+  const signature = req.headers.get("x-hub-signature-256");
+  if (!verifyMetaSignature(rawBody, signature, appSecret)) {
+    return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
+  }
+
+  let body: unknown;
   try {
-    const body = await req.json();
-    const inbound = parseInboundMessages(body);
-    for (const msg of inbound) {
-      await handleOne(msg).catch((e) =>
-        console.error("[webhook] handle", e?.message || e)
-      );
-    }
-  } catch (e) {
-    console.error("[webhook] body", e);
+    body = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const inbound = parseInboundMessages(body);
+  for (const msg of inbound) {
+    await handleOne(msg).catch((e) =>
+      console.error("[webhook] handle", e instanceof Error ? e.message : e)
+    );
   }
   return NextResponse.json({ ok: true });
 }
@@ -51,7 +68,8 @@ async function handleOne(msg: {
   text: string;
   messageId: string;
 }) {
-  let agent = msg.phoneNumberId
+  // Never guess the tenant: every WhatsApp number must be explicitly bound to one agent.
+  const agent = msg.phoneNumberId
     ? await prisma.agent.findFirst({
         where: {
           cloudPhoneNumberId: msg.phoneNumberId,
@@ -60,15 +78,8 @@ async function handleOne(msg: {
       })
     : null;
 
-  if (!agent && process.env.WHATSAPP_PHONE_NUMBER_ID === msg.phoneNumberId) {
-    agent = await prisma.agent.findFirst({
-      where: { status: { in: ["active", "paused"] } },
-      orderBy: { updatedAt: "desc" },
-    });
-  }
-
   if (!agent) {
-    console.warn("[webhook] no agent for phone_number_id", msg.phoneNumberId);
+    console.warn("[webhook] no explicitly configured agent for phone_number_id", msg.phoneNumberId);
     return;
   }
 
@@ -79,24 +90,27 @@ async function handleOne(msg: {
     text: msg.text,
   });
 
-  const token = process.env.WHATSAPP_CLOUD_TOKEN || "";
-  const phoneNumberId =
-    agent.cloudPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+  let token = "";
+  try {
+    token = agent.cloudTokenEnc ? decryptWhatsAppToken(agent.cloudTokenEnc) : "";
+  } catch (e) {
+    console.error("[webhook] unable to decrypt agent Cloud API token", e instanceof Error ? e.message : e);
+  }
 
+  const phoneNumberId = agent.cloudPhoneNumberId || "";
   if (!token || !phoneNumberId) {
     await prisma.activityLog.create({
       data: {
         organizationId: agent.organizationId,
         agentId: agent.id,
         level: "error",
-        message: "Cloud API token or phone_number_id manquant",
+        message: "Configuration Cloud API incomplète ou jeton chiffré illisible",
       },
     });
     return;
   }
 
   let replyText = "";
-
   switch (result.kind) {
     case "ignore":
     case "paused":

@@ -1,18 +1,26 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { normalizeEmail, validatePasswordStrength } from "../lib/security";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const email = "demo@cmr-school.online";
+  const email = normalizeEmail(process.env.SEED_ADMIN_EMAIL);
+  const password = process.env.SEED_ADMIN_PASSWORD || "";
+  const passwordError = validatePasswordStrength(password);
+  if (!email || passwordError) {
+    throw new Error(
+      "Set a valid SEED_ADMIN_EMAIL and a SEED_ADMIN_PASSWORD (at least 8 characters, with a letter and a number) before running the seed."
+    );
+  }
+
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     console.log("Seed already applied.");
     return;
   }
 
-  const passwordHash = await bcrypt.hash("demo1234", 12);
-
+  const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
     data: {
       email,
@@ -67,8 +75,6 @@ async function main() {
   });
 
   console.log("Seed OK");
-  console.log("Email :", email);
-  console.log("Mot de passe : demo1234");
 }
 
 main()

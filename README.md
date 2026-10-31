@@ -13,8 +13,8 @@ Monolithe Baileys d’origine : [ai-wa-agent](https://github.com/alexchep47-gif/
 
 | Couche | Techno |
 |--------|--------|
-| App | Next.js 15 (App Router) + Tailwind |
-| Data | Prisma · SQLite (dev) / Postgres (prod) |
+| App | Next.js 16 (App Router) + React 19 + Tailwind |
+| Data | Prisma · SQLite (prototype uniquement ; la migration Postgres est à faire avant une production multi-instance) |
 | Auth | Sessions JWT httpOnly + hash bcrypt |
 | CI | GitHub Actions (`ci.yml`) |
 | WhatsApp | Cloud API (cible) · Baileys (prototype) |
@@ -26,13 +26,15 @@ Monolithe Baileys d’origine : [ai-wa-agent](https://github.com/alexchep47-gif/
 ```bash
 npm install
 cp .env.example .env
-# AUTH_SECRET = chaîne aléatoire ≥ 32 caractères
+# Renseigner AUTH_SECRET, META_APP_SECRET, WHATSAPP_VERIFY_TOKEN et
+# WHATSAPP_TOKEN_ENCRYPTION_KEY dans .env avant un vrai déploiement.
 npx prisma db push
-npx tsx prisma/seed.ts
+# Pour charger un compte d'essai local : définir SEED_ADMIN_EMAIL et
+# SEED_ADMIN_PASSWORD, puis lancer `npm run db:seed`.
 npm run dev
 ```
 
-Démo : `demo@cmr-school.online` / `demo1234`
+Le schéma Prisma utilise actuellement SQLite. Ne pas déployer cette version sur plusieurs instances serverless : le passage à PostgreSQL et la création de migrations de production sont des prérequis.
 
 ---
 
@@ -43,9 +45,11 @@ Démo : `demo@cmr-school.online` / `demo1234`
 1. `npm ci`
 2. Prisma generate + db push (SQLite CI)
 3. `tsc --noEmit`
-4. `next build`
-5. Artifact `.next`
-6. `npm audit` (high+) en job parallèle
+4. `npm run lint`
+5. `npm test`
+6. `next build`
+7. Artifact `.next`
+8. `npm audit` (high+) en job parallèle
 
 Workflows :
 

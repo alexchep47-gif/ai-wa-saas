@@ -19,14 +19,18 @@
 | Headers | CSP, X-Frame-Options DENY, nosniff, Referrer-Policy |
 | `poweredByHeader` | désactivé |
 | Sanitisation | textes, prompts, emails, téléphones |
-| Webhook Meta | verify token ; toujours répondre 200 contrôlé |
+| Webhook Meta | HMAC-SHA256 sur le corps brut ; fail closed sans `META_APP_SECRET` |
+| Jeton WhatsApp | AES-256-GCM par agent ; la clé reste dans les secrets du serveur |
+| Routage tenant | `phone_number_id` doit correspondre exactement à un agent configuré ; aucun agent « dernier actif » par défaut |
 | IP | stockée uniquement sous hash |
 
 ## À faire avant production réelle
 
 - [ ] `AUTH_SECRET` ≥ 32 octets aléatoires
-- [ ] PostgreSQL + backups chiffrés
-- [ ] Chiffrement applicatif des `cloudTokenEnc` (KMS ou libsodium)
+- [ ] `AUTH_SECRET` ≥ 32 octets aléatoires
+- [ ] PostgreSQL + migrations et backups chiffrés (le prototype utilise encore SQLite)
+- [ ] Traiter l’avis npm high restant dans `prisma` / `@prisma/config` (migration Prisma compatible, puis nouvel audit)
+- [ ] Rotation documentée de `WHATSAPP_TOKEN_ENCRYPTION_KEY` avec rechiffrement des jetons
 - [ ] CSP avec nonces (supprimer unsafe-inline)
 - [ ] WAF / rate limit edge (Vercel firewall)
 - [ ] Journal d'audit immuable pour actions admin

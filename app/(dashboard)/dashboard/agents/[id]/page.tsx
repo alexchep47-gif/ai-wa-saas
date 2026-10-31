@@ -50,14 +50,15 @@ export default async function AgentDetailPage({
           systemPrompt: agent.systemPrompt,
           status: agent.status,
           quickReplies,
+          cloudPhoneNumberId: agent.cloudPhoneNumberId || "",
+          cloudTokenConfigured: Boolean(agent.cloudTokenEnc),
         }}
       />
 
       <div className="card p-4 text-sm text-slate-600 space-y-2 bg-slate-50 border-slate-200">
         <p className="font-semibold text-slate-800">Connexion WhatsApp</p>
         <p>
-          Production : <strong>Cloud API</strong> Meta (token + Phone Number ID sur le
-          worker, jamais dans le navigateur).
+          Production : <strong>Cloud API</strong> Meta. Configurez le Phone Number ID et le jeton dans le formulaire ci-dessus.
         </p>
         <p>
           Baileys : prototype privé uniquement — non exposé comme option garantie.

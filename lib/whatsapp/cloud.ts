@@ -10,8 +10,10 @@ export type SendTextParams = {
   body: string;
 };
 
+const GRAPH_API_VERSION = process.env.META_GRAPH_API_VERSION || "v26.0";
+
 export async function sendTextMessage(params: SendTextParams) {
-  const url = `https://graph.facebook.com/v21.0/${params.phoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${params.phoneNumberId}/messages`;
 
   const res = await fetch(url, {
     method: "POST",
@@ -41,7 +43,7 @@ export function verifyWebhook(
   challenge: string | null,
   expectedToken: string
 ) {
-  if (mode === "subscribe" && token === expectedToken && challenge) {
+  if (expectedToken && mode === "subscribe" && token === expectedToken && challenge) {
     return challenge;
   }
   return null;
