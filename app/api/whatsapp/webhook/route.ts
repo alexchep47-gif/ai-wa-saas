@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
-import { verifyWebhook } from "@/lib/whatsapp/cloud";
+import { prisma } from "@/lib/prisma";
+import {
+  parseInboundMessages,
+  sendTextMessage,
+  verifyWebhook,
+} from "@/lib/whatsapp/cloud";
+import {
+  loadRecentHistory,
+  runInboundPipeline,
+  saveTurn,
+} from "@/lib/pipeline";
+import { generateReply } from "@/lib/ai/gemini";
 
-/**
- * Webhook Meta WhatsApp Cloud API.
- * Configure in Meta Developer Console:
- *   Callback URL: https://your-domain/api/whatsapp/webhook
- *   Verify token: value of WHATSAPP_VERIFY_TOKEN
- *
- * For multi-tenant, map phone_number_id → agent in the database
- * and route the message to the correct worker / LLM.
- */
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const mode = searchParams.get("hub.mode");
@@ -28,21 +33,127 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-
-    // TODO multi-tenant:
-    // 1. Extract phone_number_id from body.entry[0].changes[0].value.metadata
-    // 2. Find Agent by cloudPhoneNumberId
-    // 3. If message is text, load systemPrompt + quickReplies
-    // 4. Call Gemini / other LLM (keys stay on server)
-    // 5. Reply via sendTextMessage
-    // 6. Log to ActivityLog
-
-    console.log("[webhook] received", JSON.stringify(body).slice(0, 500));
-
-    // Always 200 quickly for Meta
-    return NextResponse.json({ ok: true });
+    const inbound = parseInboundMessages(body);
+    for (const msg of inbound) {
+      await handleOne(msg).catch((e) =>
+        console.error("[webhook] handle", e?.message || e)
+      );
+    }
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ ok: true }); // still 200 to avoid retries storm
+    console.error("[webhook] body", e);
+  }
+  return NextResponse.json({ ok: true });
+}
+
+async function handleOne(msg: {
+  phoneNumberId: string;
+  from: string;
+  text: string;
+  messageId: string;
+}) {
+  let agent = msg.phoneNumberId
+    ? await prisma.agent.findFirst({
+        where: {
+          cloudPhoneNumberId: msg.phoneNumberId,
+          status: { in: ["active", "paused"] },
+        },
+      })
+    : null;
+
+  if (!agent && process.env.WHATSAPP_PHONE_NUMBER_ID === msg.phoneNumberId) {
+    agent = await prisma.agent.findFirst({
+      where: { status: { in: ["active", "paused"] } },
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+
+  if (!agent) {
+    console.warn("[webhook] no agent for phone_number_id", msg.phoneNumberId);
+    return;
+  }
+
+  const result = await runInboundPipeline({
+    agentId: agent.id,
+    organizationId: agent.organizationId,
+    phone: msg.from,
+    text: msg.text,
+  });
+
+  const token = process.env.WHATSAPP_CLOUD_TOKEN || "";
+  const phoneNumberId =
+    agent.cloudPhoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+
+  if (!token || !phoneNumberId) {
+    await prisma.activityLog.create({
+      data: {
+        organizationId: agent.organizationId,
+        agentId: agent.id,
+        level: "error",
+        message: "Cloud API token or phone_number_id manquant",
+      },
+    });
+    return;
+  }
+
+  let replyText = "";
+
+  switch (result.kind) {
+    case "ignore":
+    case "paused":
+      return;
+    case "quick_reply":
+      replyText = result.text;
+      break;
+    case "quota_exceeded":
+      replyText = result.text;
+      break;
+    case "escalation":
+      replyText = result.userText;
+      break;
+    case "ai": {
+      const history = await loadRecentHistory(result.contactId, 6);
+      replyText = await generateReply({
+        systemPrompt: result.promptContext,
+        userMessage: msg.text,
+        lang: result.lang,
+        history: history.map((t) => ({
+          role: t.role as "user" | "model",
+          content: t.content,
+        })),
+      });
+      await saveTurn(agent.id, result.contactId, "user", msg.text);
+      await saveTurn(agent.id, result.contactId, "model", replyText);
+      break;
+    }
+  }
+
+  if (!replyText) return;
+
+  try {
+    await sendTextMessage({
+      phoneNumberId,
+      accessToken: token,
+      to: msg.from,
+      body: replyText,
+    });
+    await prisma.activityLog.create({
+      data: {
+        organizationId: agent.organizationId,
+        agentId: agent.id,
+        level: "info",
+        message: `Réponse envoyée → ${msg.from}`,
+        meta: JSON.stringify({ kind: result.kind, messageId: msg.messageId }),
+      },
+    });
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    await prisma.activityLog.create({
+      data: {
+        organizationId: agent.organizationId,
+        agentId: agent.id,
+        level: "error",
+        message: `Échec envoi Cloud API: ${err.slice(0, 200)}`,
+      },
+    });
   }
 }
