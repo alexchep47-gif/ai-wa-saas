@@ -56,34 +56,31 @@ export function AgentConfigForm({ agentId, initial }: Props) {
   }
 
   return (
-    <form onSubmit={save} className="bg-white border rounded-xl p-6 space-y-5">
+    <form onSubmit={save} className="card p-6 space-y-5">
       <div>
-        <label className="block text-sm font-medium mb-1">Nom de l'agent</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2"
-        />
+        <label className="label">Nom de l'agent</label>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">
-          Prompt système (rôle de l'agent)
-        </label>
+        <label className="label">Prompt système</label>
         <textarea
+          className="input min-h-[140px] font-mono text-[13px] leading-relaxed"
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
           rows={6}
-          className="w-full border rounded-lg px-3 py-2 text-sm"
         />
+        <p className="mt-1 text-xs text-slate-400">
+          Définit le rôle. Ne collez jamais de secrets ici.
+        </p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Statut</label>
+        <label className="label">Statut</label>
         <select
+          className="input"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="w-full border rounded-lg px-3 py-2"
         >
           <option value="draft">Brouillon</option>
           <option value="active">Actif</option>
@@ -92,49 +89,35 @@ export function AgentConfigForm({ agentId, initial }: Props) {
       </div>
 
       <fieldset className="space-y-3">
-        <legend className="text-sm font-medium">Réponses rapides</legend>
-        <div>
-          <label className="text-xs text-slate-500">!tarifs</label>
-          <textarea
-            value={tarifs}
-            onChange={(e) => setTarifs(e.target.value)}
-            rows={2}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-slate-500">!inscription</label>
-          <textarea
-            value={inscription}
-            onChange={(e) => setInscription(e.target.value)}
-            rows={2}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-slate-500">!contact</label>
-          <textarea
-            value={contact}
-            onChange={(e) => setContact(e.target.value)}
-            rows={2}
-            className="w-full border rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
+        <legend className="text-sm font-semibold text-slate-800">Réponses rapides</legend>
+        {(
+          [
+            ["!tarifs", tarifs, setTarifs],
+            ["!inscription", inscription, setInscription],
+            ["!contact", contact, setContact],
+          ] as const
+        ).map(([label, val, set]) => (
+          <div key={label}>
+            <label className="text-xs text-slate-500 font-mono">{label}</label>
+            <textarea
+              className="input mt-1"
+              rows={2}
+              value={val}
+              onChange={(e) => set(e.target.value)}
+            />
+          </div>
+        ))}
       </fieldset>
 
       {msg && (
         <p
-          className={`text-sm ${msg === "Enregistré" ? "text-green-600" : "text-red-600"}`}
+          className={`text-sm ${msg === "Enregistré" ? "text-emerald-700" : "text-red-700"}`}
         >
           {msg}
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={saving}
-        className="bg-brand-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50"
-      >
+      <button type="submit" disabled={saving} className="btn-primary">
         {saving ? "Enregistrement…" : "Enregistrer"}
       </button>
     </form>

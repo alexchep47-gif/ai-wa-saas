@@ -1,0 +1,29 @@
+name: Deploy readiness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  readiness:
+    name: Production readiness checklist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify critical files
+        run: |
+          test -f package.json
+          test -f prisma/schema.prisma
+          test -f next.config.ts
+          test -f docs/SECURITY.md
+          test -f .env.example
+          echo "Checklist OK"
+      - name: No secrets in tree
+        run: |
+          if grep -RInE '(GEMINI_API_KEY|WHATSAPP_CLOUD_TOKEN|AUTH_SECRET)\s*=\s*[^*"]' \
+            --exclude-dir=.git --exclude-dir=node_modules --exclude='*.md' --exclude='.env.example' . ; then
+            echo "Possible secret material found"
+            exit 1
+          fi
+          echo "No plaintext secrets detected"

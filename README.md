@@ -1,47 +1,23 @@
-# AI WA SaaS — Agents WhatsApp éducatifs multi-tenant
+# AI WA SaaS
 
-**Produit** : service SaaS pour établissements scolaires et services éducatifs au Cameroun.
-L’application (web d’abord, puis Flutter) sert à **configurer et surveiller** l’agent.
-Les agents tournent **24 h/24 sur un serveur**, jamais uniquement dans une app mobile.
+Service multi-tenant pour agents WhatsApp éducatifs (établissements scolaires, Cameroun).
 
-Premier cas pilote : **CMR SCHOOL / Mathsfor.all**.
+**Dashboard web** pour configurer et surveiller. **Workers serveur** pour les connexions 24/7.  
+Premier pilote : **CMR SCHOOL / Mathsfor.all**.
 
-> Version actuelle du bot monolithique (Baileys) : [ai-wa-agent](https://github.com/alexchep47-gif/ai-wa-agent).
-> Ce dépôt le transforme en architecture SaaS propre.
+Monolithe Baileys d’origine : [ai-wa-agent](https://github.com/alexchep47-gif/ai-wa-agent).
 
 ---
 
-## Architecture cible (respectée)
+## Stack
 
-| Couche | Rôle |
-|--------|------|
-| **Dashboard web adaptatif** (Next.js) | Création de compte, assistant de configuration, prompt, réponses rapides, stats, journaux, admins, abonnement |
-| **Backend / API** | Comptes, permissions, abonnements, isolation multi-tenant |
-| **Base de données** | Paramètres et données isolés par client (Prisma) |
-| **Workers** | Connexions WhatsApp autorisées + tâches planifiées (séparés du dashboard) |
-| **Clés & sessions** | Chiffrées, jamais dans le client mobile/web |
-
-Le dashboard **ne contient jamais** de clé Gemini ni de session WhatsApp.
-
-### Connexion WhatsApp
-
-| Mode | Statut | Usage |
-|------|--------|-------|
-| **WhatsApp Cloud API (officielle)** | Cible commerciale | Messages privés, fiable, facturée par Meta |
-| **Baileys (Web)** | Prototype privé uniquement | Ne pas vendre comme connexion garantie |
-| **Publication dans les chaînes** | Expérimental / manuel | Pas d’API officielle documentée → calendrier à copier manuellement pour l’instant |
-
-Voir la documentation Meta et la réponse de la communauté sur les chaînes.
-
----
-
-## Stack technique (MVP pilote)
-
-- **Frontend + API** : Next.js 15 (App Router) + Tailwind + shadcn/ui style
-- **ORM** : Prisma
-- **DB** : SQLite (dev) → PostgreSQL (prod)
-- **Auth** : simple email + mot de passe (session cookie) pour le pilote
-- **Déploiement** : Vercel (dashboard) + worker séparé plus tard (Railway / Render)
+| Couche | Techno |
+|--------|--------|
+| App | Next.js 15 (App Router) + Tailwind |
+| Data | Prisma · SQLite (dev) / Postgres (prod) |
+| Auth | Sessions JWT httpOnly + hash bcrypt |
+| CI | GitHub Actions (`ci.yml`) |
+| WhatsApp | Cloud API (cible) · Baileys (prototype) |
 
 ---
 
@@ -50,57 +26,57 @@ Voir la documentation Meta et la réponse de la communauté sur les chaînes.
 ```bash
 npm install
 cp .env.example .env
+# AUTH_SECRET = chaîne aléatoire ≥ 32 caractères
 npx prisma db push
+npx tsx prisma/seed.ts
 npm run dev
 ```
 
-Ouvre http://localhost:3000
-
-Compte démo créé automatiquement au premier démarrage si la base est vide (voir `prisma/seed.ts`).
+Démo : `demo@cmr-school.online` / `demo1234`
 
 ---
 
-## Structure du dépôt
+## CI (GitHub Actions)
 
-```
-ai-wa-saas/
-├── app/                    # Next.js App Router
-│   ├── (auth)/             # login / register
-│   ├── (dashboard)/        # tableau de bord isolé par tenant
-│   │   ├── agents/
-│   │   ├── settings/
-│   │   ├── logs/
-│   │   └── billing/
-│   └── api/                # routes API
-├── lib/
-│   ├── auth.ts
-│   ├── prisma.ts
-│   └── whatsapp/           # stubs Cloud API + notes Baileys
-├── prisma/
-│   ├── schema.prisma
-│   └── seed.ts
-├── components/
-└── docs/
-    ├── PRODUCT.md          # vision produit & go/no-go
-    └── WHATSAPP.md         # règles Cloud API, coûts, chaînes
-```
+À chaque push / PR sur `main` :
+
+1. `npm ci`
+2. Prisma generate + db push (SQLite CI)
+3. `tsc --noEmit`
+4. `next build`
+5. Artifact `.next`
+6. `npm audit` (high+) en job parallèle
+
+Workflows :
+
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — build complet
+- [`.github/workflows/deploy-preview.yml`](.github/workflows/deploy-preview.yml) — checklist secrets / fichiers
 
 ---
 
-## Plan d’attaque (rappel)
+## Sécurité (résumé)
 
-1. Valider la demande avec quelques écoles (messages privés d’abord).
-2. Pilote web payant (ce dépôt).
-3. Sécuriser / faire valider la connexion Cloud API pour le cas éducatif.
-4. Abonnement avec essai + forfaits limités (pas d’illimité au départ).
-5. Bêta limitée → apps Flutter Android/iOS.
+Voir [`docs/SECURITY.md`](docs/SECURITY.md).
 
-**Premier go/no-go** : connexion WhatsApp commerciale autorisée et exploitable.
-**Deuxième** : prouver que des clients paient et renouvellent.
+- Rate-limit + lockout login
+- Sanitisation entrées
+- Headers CSP / XFO / nosniff
+- Isolation `organizationId` sur agents, logs, escalades
+- Secrets jamais dans le client
 
 ---
 
-## Licence & confidentialité
+## Domaine métier
 
-Code propriétaire pour l’instant.  
-Les données de conversation envoyées à un fournisseur IA (Gemini, etc.) doivent être expliquées aux clients et le consentement obtenu (règles Apple notamment).
+- [`docs/DOMAIN_LOGIC.md`](docs/DOMAIN_LOGIC.md) — découpage du monolithe
+- [`docs/MESSAGE_PIPELINE.md`](docs/MESSAGE_PIPELINE.md) — pipeline message privé
+- [`docs/PRODUCT.md`](docs/PRODUCT.md) — go/no-go produit
+
+---
+
+## Roadmap courte
+
+1. ✅ Dashboard + multi-tenant + escalades + CI  
+2. Worker Cloud API (webhook → pipeline → Gemini → reply)  
+3. Pilote payant 3–5 écoles  
+4. Flutter (mêmes API)  

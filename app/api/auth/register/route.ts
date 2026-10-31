@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSession, hashPassword } from "@/lib/auth";
+import {
+  consumeRateLimit,
+  normalizeEmail,
+  publicErrorMessage,
+  sanitizeName,
+  validatePasswordStrength,
+} from "@/lib/security";
 
 function slugify(s: string) {
   return s
@@ -14,19 +21,27 @@ function slugify(s: string) {
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password, orgName } = await req.json();
+    const body = await req.json();
+    const email = normalizeEmail(body.email);
+    const password = typeof body.password === "string" ? body.password : "";
+    const name = sanitizeName(body.name);
+    const orgName = sanitizeName(body.orgName);
 
     if (!email || !password || !orgName) {
+      return NextResponse.json({ error: "Champs manquants" }, { status: 400 });
+    }
+
+    const rl = await consumeRateLimit(`register:${email}`, 3, 60 * 60 * 1000);
+    if (!rl.allowed) {
       return NextResponse.json(
-        { error: "Champs manquants" },
-        { status: 400 }
+        { error: "Trop d'inscriptions pour cet email. Réessaie plus tard." },
+        { status: 429 }
       );
     }
-    if (password.length < 8) {
-      return NextResponse.json(
-        { error: "Mot de passe trop court" },
-        { status: 400 }
-      );
+
+    const pwdErr = validatePasswordStrength(password);
+    if (pwdErr) {
+      return NextResponse.json({ error: pwdErr }, { status: 400 });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -44,11 +59,7 @@ export async function POST(req: Request) {
     const passwordHash = await hashPassword(password);
 
     const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        name: name || null,
-      },
+      data: { email, passwordHash, name: name || null },
     });
 
     const org = await prisma.organization.create({
@@ -57,15 +68,12 @@ export async function POST(req: Request) {
         slug,
         plan: "trial",
         trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        monthlyMsgLimit: 500,
       },
     });
 
     await prisma.membership.create({
-      data: {
-        userId: user.id,
-        organizationId: org.id,
-        role: "owner",
-      },
+      data: { userId: user.id, organizationId: org.id, role: "owner" },
     });
 
     await prisma.agent.create({
@@ -73,13 +81,23 @@ export async function POST(req: Request) {
         name: `Agent ${orgName}`,
         organizationId: org.id,
         status: "draft",
+        systemPrompt:
+          "Tu es un assistant éducatif camerounais pour un établissement scolaire. Réponds en français, clairement et poliment. Pour les inscriptions et paiements, propose un contact humain.",
+        quickReplies: JSON.stringify({
+          tarifs: "Consultez nos tarifs sur place ou écrivez !inscription.",
+          inscription: "Pour vous inscrire, indiquez nom, niveau et série. Un conseiller vous recontactera.",
+          contact: "Un membre de l'équipe vous répondra dans les plus brefs délais.",
+        }),
       },
     });
 
     await createSession(user.id);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    console.error("[auth/register]", e);
+    return NextResponse.json(
+      { error: publicErrorMessage(e) },
+      { status: 500 }
+    );
   }
 }

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  publicErrorMessage,
+  sanitizeName,
+  sanitizePlainText,
+  sanitizePrompt,
+} from "@/lib/security";
 
 export async function PATCH(
   req: Request,
@@ -33,13 +39,18 @@ export async function PATCH(
       quickReplies?: string;
     } = {};
 
-    if (typeof body.name === "string") data.name = body.name.slice(0, 120);
+    if (typeof body.name === "string") data.name = sanitizeName(body.name) || agent.name;
     if (typeof body.systemPrompt === "string")
-      data.systemPrompt = body.systemPrompt.slice(0, 8000);
-    if (["draft", "active", "paused"].includes(body.status))
-      data.status = body.status;
+      data.systemPrompt = sanitizePrompt(body.systemPrompt) || agent.systemPrompt;
+    if (["draft", "active", "paused"].includes(body.status)) data.status = body.status;
     if (body.quickReplies && typeof body.quickReplies === "object") {
-      data.quickReplies = JSON.stringify(body.quickReplies);
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(body.quickReplies)) {
+        if (typeof k === "string" && typeof v === "string") {
+          clean[k.slice(0, 40)] = sanitizePlainText(v, 1000);
+        }
+      }
+      data.quickReplies = JSON.stringify(clean);
     }
 
     await prisma.agent.update({ where: { id }, data });
@@ -56,6 +67,6 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(e) }, { status: 500 });
   }
 }
