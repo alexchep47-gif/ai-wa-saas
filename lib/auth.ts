@@ -1,16 +1,18 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "./prisma";
 import bcrypt from "bcryptjs";
+import { generateSecureToken, hashIp, hashToken } from "./security";
 
 const secret = new TextEncoder().encode(
-  process.env.AUTH_SECRET || "dev-secret-change-me"
+  process.env.AUTH_SECRET || "dev-secret-change-me-in-production-min-32-chars"
 );
 
 const COOKIE_NAME = "aiwa_session";
+const SESSION_DAYS = 14;
 
 export async function hashPassword(password: string) {
-  return bcrypt.hash(password, 10);
+  return bcrypt.hash(password, 12);
 }
 
 export async function verifyPassword(password: string, hash: string) {
@@ -18,16 +20,36 @@ export async function verifyPassword(password: string, hash: string) {
 }
 
 export async function createSession(userId: string) {
-  const token = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  const rawToken = generateSecureToken(32);
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+
+  const h = await headers();
+  const ua = h.get("user-agent")?.slice(0, 200) || null;
+  const ip =
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-real-ip") ||
+    null;
 
   await prisma.session.create({
-    data: { token, userId, expiresAt },
+    data: {
+      token: tokenHash,
+      userId,
+      userAgent: ua,
+      ipHash: hashIp(ip),
+      expiresAt,
+    },
   });
 
-  const jwt = await new SignJWT({ sub: userId, sid: token })
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastLoginAt: new Date(), failedLogins: 0, lockedUntil: null },
+  });
+
+  const jwt = await new SignJWT({ sub: userId, sid: tokenHash })
     .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("30d")
+    .setIssuedAt()
+    .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(secret);
 
   const cookieStore = await cookies();
@@ -39,7 +61,7 @@ export async function createSession(userId: string) {
     expires: expiresAt,
   });
 
-  return token;
+  return tokenHash;
 }
 
 export async function destroySession() {
@@ -49,10 +71,12 @@ export async function destroySession() {
     try {
       const { payload } = await jwtVerify(jwt, secret);
       if (payload.sid) {
-        await prisma.session.deleteMany({ where: { token: String(payload.sid) } });
+        await prisma.session.deleteMany({
+          where: { token: String(payload.sid) },
+        });
       }
     } catch {
-      // ignore
+      // ignore invalid token
     }
   }
   cookieStore.delete(COOKIE_NAME);
@@ -80,6 +104,9 @@ export async function getCurrentUser() {
     });
 
     if (!session || session.expiresAt < new Date()) {
+      if (session) {
+        await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
+      }
       return null;
     }
 
@@ -93,4 +120,11 @@ export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   return user;
+}
+
+export function getPrimaryOrgId(
+  user: Awaited<ReturnType<typeof getCurrentUser>>
+): string | null {
+  if (!user) return null;
+  return user.memberships[0]?.organizationId ?? null;
 }

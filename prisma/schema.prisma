@@ -1,5 +1,5 @@
-// Multi-tenant schema for AI WA SaaS
-// Each Organization (school / education service) is isolated.
+// AI WA SaaS — multi-tenant schema
+// Isolation stricte par Organization. Secrets jamais en clair côté client.
 
 generator client {
   provider = "prisma-client-js"
@@ -11,39 +11,52 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  failedLogins  Int       @default(0)
+  lockedUntil   DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  memberships  Membership[]
-  sessions     Session[]
+  memberships Membership[]
+  sessions    Session[]
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String
+  userAgent  String?
+  ipHash     String?  // hash only, never store raw IP long-term without policy
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Organization {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  plan        String   @default("trial") // trial | starter | pro
-  trialEndsAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  plan            String    @default("trial") // trial | starter | pro
+  trialEndsAt     DateTime?
+  monthlyMsgLimit Int       @default(500)
+  messagesMonth   Int       @default(0)
+  monthKey        String?   // YYYY-MM for quota reset
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   memberships Membership[]
   agents      Agent[]
   logs        ActivityLog[]
+  contacts    Contact[]
+  escalations Escalation[]
 }
 
 model Membership {
@@ -57,40 +70,114 @@ model Membership {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
+  @@index([organizationId])
 }
 
 model Agent {
-  id             String   @id @default(cuid())
-  name           String
-  systemPrompt   String   @default("Tu es un assistant éducatif camerounais pour un établissement scolaire. Réponds en français, clairement et poliment.")
-  quickReplies   String   @default("{}") // JSON string: { "tarifs": "...", "inscription": "..." }
-  faq            String   @default("[]") // JSON array of {q, a}
-  status         String   @default("draft") // draft | active | paused | error
-  connectionMode String   @default("none") // none | cloud_api | baileys_prototype
-  // Cloud API fields (encrypted at rest in production)
+  id                 String    @id @default(cuid())
+  name               String
+  systemPrompt       String    @default("Tu es un assistant éducatif camerounais pour un établissement scolaire. Réponds en français, clairement et poliment.")
+  quickReplies       String    @default("{}")
+  faq                String    @default("[]")
+  status             String    @default("draft") // draft | active | paused | error
+  connectionMode     String    @default("none") // none | cloud_api | baileys_prototype
   cloudPhoneNumberId String?
-  cloudTokenEnc      String?
-  // Baileys session reference (never store raw session in dashboard)
+  cloudTokenEnc      String?   // encrypted at rest in production
   baileysSessionRef  String?
+  replyInGroups      Boolean   @default(false)
+  dailyMsgLimit      Int       @default(200)
+  messagesToday      Int       @default(0)
+  dayKey             String?   // YYYY-MM-DD Africa/Douala
   lastSeenAt         DateTime?
-  messagesToday      Int      @default(0)
   organizationId     String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  logs            ActivityLog[]
+  contacts        Contact[]
+  conversationTurns ConversationTurn[]
+  escalations     Escalation[]
+
+  @@index([organizationId])
+  @@index([cloudPhoneNumberId])
+  @@index([status])
+}
+
+model Contact {
+  id             String   @id @default(cuid())
+  phone          String   // digits only E.164 without +
+  displayName    String?
+  preferredLang  String   @default("fr") // fr | en
+  organizationId String
+  agentId        String?
+  lastMessageAt  DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  logs         ActivityLog[]
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  turns        ConversationTurn[]
+  escalations  Escalation[]
+
+  @@unique([organizationId, phone])
+  @@index([agentId])
+}
+
+model ConversationTurn {
+  id        String   @id @default(cuid())
+  role      String   // user | model
+  content   String
+  agentId   String
+  contactId String
+  createdAt DateTime @default(now())
+
+  agent   Agent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, contactId, createdAt])
+}
+
+model Escalation {
+  id             String    @id @default(cuid())
+  type           String    // deposit | human | complaint
+  status         String    @default("pending") // pending | approved | rejected | closed
+  summary        String
+  phone          String
+  organizationId String
+  agentId        String?
+  contactId      String?
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([phone, status])
 }
 
 model ActivityLog {
   id             String   @id @default(cuid())
   level          String   // info | warn | error
   message        String
-  meta           String?  // JSON
+  meta           String?
   organizationId String
   agentId        String?
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+}
+
+model RateLimitBucket {
+  id        String   @id // e.g. login:emailhash or iphash
+  count     Int      @default(0)
+  windowStart DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
