@@ -1,13 +1,6 @@
 /**
  * WhatsApp Cloud API helpers (official path).
- * Never store the permanent token in the client.
- *
  * Docs: https://developers.facebook.com/docs/whatsapp/cloud-api
- *
- * Important Meta rules for AI assistants:
- * - Distinguish general-purpose AI assistants from business-integrated AI.
- * - Free-form messages outside the 24h customer service window are restricted.
- * - Messaging has category-based pricing (utility, authentication, marketing, service).
  */
 
 export type SendTextParams = {
@@ -31,30 +24,72 @@ export async function sendTextMessage(params: SendTextParams) {
       recipient_type: "individual",
       to: params.to,
       type: "text",
-      text: { preview_url: false, body: params.body },
+      text: { preview_url: false, body: params.body.slice(0, 4096) },
     }),
   });
 
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(
-      data?.error?.message || `Cloud API error ${res.status}`
-    );
+    throw new Error(data?.error?.message || `Cloud API error ${res.status}`);
   }
   return data;
 }
 
-/**
- * Verify webhook challenge from Meta.
- */
 export function verifyWebhook(
   mode: string | null,
   token: string | null,
   challenge: string | null,
   expectedToken: string
 ) {
-  if (mode === "subscribe" && token === expectedToken) {
+  if (mode === "subscribe" && token === expectedToken && challenge) {
     return challenge;
   }
   return null;
+}
+
+export type InboundText = {
+  phoneNumberId: string;
+  from: string;
+  text: string;
+  messageId: string;
+};
+
+/** Extract first inbound text message from Meta webhook payload */
+export function parseInboundMessages(body: unknown): InboundText[] {
+  const out: InboundText[] = [];
+  try {
+    const entries = (body as { entry?: unknown[] })?.entry || [];
+    for (const entry of entries) {
+      const changes =
+        (entry as { changes?: unknown[] })?.changes || [];
+      for (const change of changes) {
+        const value = (change as { value?: Record<string, unknown> })?.value;
+        if (!value) continue;
+        const metadata = value.metadata as
+          | { phone_number_id?: string }
+          | undefined;
+        const phoneNumberId = metadata?.phone_number_id || "";
+        const messages = (value.messages as unknown[]) || [];
+        for (const msg of messages) {
+          const m = msg as {
+            from?: string;
+            id?: string;
+            type?: string;
+            text?: { body?: string };
+          };
+          if (m.type === "text" && m.text?.body && m.from) {
+            out.push({
+              phoneNumberId,
+              from: m.from.replace(/\D/g, ""),
+              text: m.text.body,
+              messageId: m.id || "",
+            });
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[webhook] parse error", e);
+  }
+  return out;
 }
