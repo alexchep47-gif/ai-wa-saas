@@ -5,16 +5,26 @@ import { publicErrorMessage } from "@/lib/security";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
-    const orgId = user.memberships[0]?.organizationId;
+    const membership = user.memberships[0];
+    if (!membership || !["owner", "admin"].includes(membership.role)) {
+      return NextResponse.json(
+        { error: "Droits administrateur requis" },
+        { status: 403 },
+      );
+    }
+    const orgId = membership.organizationId;
     if (!orgId) {
-      return NextResponse.json({ error: "Pas d'organisation" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Pas d'organisation" },
+        { status: 400 },
+      );
     }
 
     const { id } = await params;

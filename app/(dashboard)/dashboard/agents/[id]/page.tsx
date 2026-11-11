@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { AgentConfigForm } from "./agent-form";
 import Link from "next/link";
+import { SummaryDownload } from "./summary-download";
 
 export default async function AgentDetailPage({
   params,
@@ -55,17 +56,27 @@ export default async function AgentDetailPage({
         }}
       />
 
+      <div className="flex flex-wrap items-center gap-3">
+        <SummaryDownload agentId={agent.id} />
+        <p className="text-xs text-slate-500">
+          Export généré côté serveur avec PDFme, sans exposer les jetons
+          WhatsApp.
+        </p>
+      </div>
+
       <div className="card p-4 text-sm text-slate-600 space-y-2 bg-slate-50 border-slate-200">
         <p className="font-semibold text-slate-800">Connexion WhatsApp</p>
         <p>
-          Production : <strong>Cloud API</strong> Meta. Configurez le Phone Number ID et le jeton dans le formulaire ci-dessus.
+          Production : <strong>Cloud API</strong> Meta. Configurez le Phone
+          Number ID et le jeton dans le formulaire ci-dessus.
         </p>
         <p>
-          Baileys : prototype privé uniquement — non exposé comme option garantie.
+          Baileys : prototype privé uniquement — non exposé comme option
+          garantie.
         </p>
         <p>
-          Chaînes WhatsApp : pas d'API officielle de publication → calendrier manuel
-          recommandé.
+          Chaînes WhatsApp : pas d'API officielle de publication → calendrier
+          manuel recommandé.
         </p>
       </div>
     </div>
