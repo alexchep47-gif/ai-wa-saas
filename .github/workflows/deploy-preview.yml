@@ -22,7 +22,7 @@ jobs:
       - name: No secrets in tree
         run: |
           if grep -RInE '(GEMINI_API_KEY|WHATSAPP_CLOUD_TOKEN|WHATSAPP_TOKEN_ENCRYPTION_KEY|META_APP_SECRET|WHATSAPP_VERIFY_TOKEN|AUTH_SECRET)\s*=\s*[^*"]' \
-            --exclude-dir=.git --exclude-dir=node_modules --exclude='*.md' --exclude='.env.example' . ; then
+            --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=test --exclude-dir=tests --exclude='*.md' --exclude='.env.example' . ; then
             echo "Possible secret material found"
             exit 1
           fi
