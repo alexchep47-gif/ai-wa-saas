@@ -29,7 +29,7 @@ export async function GET(
   if (!agent)
     return NextResponse.json({ error: "Agent introuvable" }, { status: 404 });
 
-  let quickReplies: Record<string, string> = {};
+  const quickReplies: Record<string, string> = {};
   try {
     const parsed: unknown = JSON.parse(agent.quickReplies || "{}");
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
