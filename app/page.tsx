@@ -12,10 +12,10 @@ export default async function HomePage() {
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand-500 text-white font-bold text-sm">
-              WA
+              N
             </span>
             <span className="font-bold text-lg text-slate-900 tracking-tight">
-              AI WA SaaS
+              NCAM AI
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -32,19 +32,19 @@ export default async function HomePage() {
       <main className="flex-1">
         <section className="max-w-5xl mx-auto px-4 pt-16 pb-12 text-center">
           <p className="inline-flex items-center gap-2 rounded-full bg-brand-50 border border-brand-100 px-3 py-1 text-xs font-medium text-brand-700 mb-6">
-            Pilote établissements scolaires · Cameroun
+            NCAM AI · centre d’agents intelligents
           </p>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-slate-900 max-w-3xl mx-auto leading-[1.15]">
-            Agents WhatsApp pour vos élèves, parents et inscriptions
+            Pilotez vos agents IA sur le web, mobile et WhatsApp
           </h1>
           <p className="mt-5 text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Configurez un assistant en français : cours, FAQ, horaires, contact et
-            transfert humain. L’agent tourne 24&nbsp;h/24 sur un serveur — pas dans
-            une application mobile.
+            NCAM AI transforme les questions en réponses, documents et actions utiles.
+            Configurez vos agents, connectez WhatsApp et gardez le contrôle depuis
+            une interface installable sur ordinateur comme sur téléphone.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Link href="/register" className="btn-primary px-6 py-3 text-base">
-              Démarrer l’essai 14 jours
+              Ouvrir NCAM AI
             </Link>
             <Link href="/login" className="btn-secondary px-6 py-3 text-base">
               J’ai déjà un compte
@@ -55,16 +55,16 @@ export default async function HomePage() {
         <section className="max-w-5xl mx-auto px-4 pb-20 grid sm:grid-cols-3 gap-4">
           {[
             {
-              t: "Cloud API d’abord",
-              d: "Connexion commerciale via l’API officielle Meta. Baileys reste un prototype privé.",
+              t: "Un cerveau, plusieurs canaux",
+              d: "NCAM AI orchestre vos conversations et vos documents ; WhatsApp reste un canal connecté.",
             },
             {
-              t: "Multi-établissement",
-              d: "Chaque école a ses prompts, réponses rapides, quotas et journaux isolés.",
+              t: "Web et mobile",
+              d: "Installez NCAM AI comme une application sur votre téléphone ou utilisez le tableau de bord web.",
             },
             {
-              t: "Contrôle & sécurité",
-              d: "Clés hors client, sessions httpOnly, rate-limit login, pause agent en un clic.",
+              t: "Documents prêts à partager",
+              d: "Générez des synthèses PDFme depuis les fiches agent et les conversations utiles.",
             },
           ].map((item) => (
             <div key={item.t} className="card p-5 text-left">
@@ -76,7 +76,7 @@ export default async function HomePage() {
       </main>
 
       <footer className="border-t border-slate-200/80 py-6 text-center text-sm text-slate-500">
-        Premier cas pilote · CMR SCHOOL / Mathsfor.all · Chaînes WhatsApp non promises
+        NCAM AI · intelligence utile, connectée à vos canaux
       </footer>
     </div>
   );

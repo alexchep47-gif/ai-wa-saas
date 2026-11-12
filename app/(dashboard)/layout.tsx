@@ -28,9 +28,9 @@ export default async function DashboardLayout({
         <div className="p-4 border-b border-slate-100">
           <Link href="/dashboard" className="flex items-center gap-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white text-xs font-bold">
-              WA
+              N
             </span>
-            <span className="font-bold text-slate-900">AI WA SaaS</span>
+            <span className="font-bold text-slate-900">NCAM AI</span>
           </Link>
           {org && (
             <p className="text-xs text-slate-500 mt-2 truncate pl-10">{org.name}</p>

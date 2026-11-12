@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="NCAM AI">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6c63ff"/><stop offset="1" stop-color="#11b5ae"/></linearGradient></defs>
+  <rect width="512" height="512" rx="128" fill="#080b1c"/>
+  <path d="M120 330V182h38l91 91v-91h44v148h-38l-91-91v91h-44Zm206 0V182h44v148h-44Z" fill="url(#g)"/>
+  <circle cx="386" cy="145" r="20" fill="#ffd166"/>
+</svg>
